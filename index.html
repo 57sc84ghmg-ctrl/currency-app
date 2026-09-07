@@ -254,7 +254,7 @@
 
   <div class="updated-note" id="updatedNote"></div>
 
-  <footer>資料來源：@fawazahmed0/currency-api（開源匯率資料）・僅供參考，實際交易匯率請以銀行公告為準</footer>
+  <footer>資料來源：Frankfurter v2（整合全球多家央行每日參考匯率）・僅供參考，實際交易匯率請以銀行公告為準</footer>
 </div>
 
 <script>
@@ -281,37 +281,27 @@ function hideStatus() {
   statusEl.className = 'status';
 }
 
-async function fetchWithFallback() {
-  const primary = 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json';
-  const fallback = 'https://latest.currency-api.pages.dev/v1/currencies/usd.min.json';
-  try {
-    const resp = await fetch(primary);
-    if (!resp.ok) throw new Error('primary status ' + resp.status);
-    return await resp.json();
-  } catch (e) {
-    console.warn('Primary rate source failed, trying fallback:', e);
-    const resp2 = await fetch(fallback);
-    if (!resp2.ok) throw new Error('fallback status ' + resp2.status);
-    return await resp2.json();
-  }
-}
-
 async function loadRates() {
   hideStatus();
   showStatus('查詢匯率中，請稍候…', false);
   try {
-    const json = await fetchWithFallback();
-    const usdRates = json.usd;
-    if (!usdRates || !usdRates.jpy || !usdRates.twd) {
+    const url = 'https://api.frankfurter.dev/v2/rates?base=USD&quotes=JPY,TWD';
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error('network status ' + resp.status);
+    }
+    const rows = await resp.json();
+    const byQuote = Object.fromEntries(rows.map(row => [row.quote, row.rate]));
+    if (!byQuote.JPY || !byQuote.TWD) {
       throw new Error('missing rates in response');
     }
-    ratesToUSD = { USD: 1, JPY: usdRates.jpy, TWD: usdRates.twd };
-    rateDate = json.date;
+    ratesToUSD = { USD: 1, JPY: byQuote.JPY, TWD: byQuote.TWD };
+    rateDate = rows[0] && rows[0].date;
 
     hideStatus();
     renderTable();
     convert();
-    updatedNote.textContent = '匯率日期：' + rateDate + '（每日更新一次）';
+    updatedNote.textContent = '匯率日期：' + rateDate + '（每個交易日更新一次，資料來源：Frankfurter v2，整合多家央行）';
   } catch (err) {
     console.error('Exchange rate lookup failed:', err);
     showStatus('查詢時發生問題，請稍後再試一次。（詳細錯誤已印在瀏覽器主控台）', true);
